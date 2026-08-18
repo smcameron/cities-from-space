@@ -3,11 +3,12 @@
 #include <math.h>
 #include <time.h>
 #include <string.h>
+#include <getopt.h>
 
 #include "bline.h"
 #include "png_utils.h"
 
-#define IMG_SIZE 512
+int img_size = 512;
 
 /* Structure to hold loaded texture data */
 typedef struct {
@@ -27,10 +28,19 @@ typedef struct {
 	unsigned char *blurred_alpha;
 } PlotContext;
 
+/* Prints usage information and exits */
+void usage(const char *prog_name) {
+	fprintf(stderr, "Usage: %s [options]\n", prog_name);
+	fprintf(stderr, "Options:\n");
+	fprintf(stderr, "  -s, --size <pixels>   Set the image dimensions (must be square). Default is 512.\n");
+	fprintf(stderr, "  -h, --help            Show this help message.\n");
+	exit(EXIT_FAILURE);
+}
+
 /* Simple separable box blur for an 8-bit alpha mask */
 void blur_alpha_mask(unsigned char *src, unsigned char *dst, int radius, int passes) {
-	int w = IMG_SIZE;
-	int h = IMG_SIZE;
+	int w = img_size;
+	int h = img_size;
 	unsigned char *temp = (unsigned char *)malloc(w * h);
 
 	for (int p = 0; p < passes; p++) {
@@ -150,14 +160,14 @@ void draw_recursive_circles(unsigned char *diffuse, int cx, int cy, float radius
 	int r = (int)radius;
 	for (int y = cy - r; y <= cy + r; y++) {
 		for (int x = cx - r; x <= cx + r; x++) {
-			if (x < 0 || x >= IMG_SIZE || y < 0 || y >= IMG_SIZE) continue;
+			if (x < 0 || x >= img_size || y < 0 || y >= img_size) continue;
 
 			if ((x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r) {
 				/* Sample color from the city texture mapping coordinates */
 				int tx = ((x % tex->w) + tex->w) % tex->w;
 				int ty = ((y % tex->h) + tex->h) % tex->h;
 				int t_idx = (ty * tex->w + tx) * (tex->hasAlpha ? 4 : 3);
-				int d_idx = (y * IMG_SIZE + x) * 4;
+				int d_idx = (y * img_size + x) * 4;
 
 				diffuse[d_idx]     = tex->pixels[t_idx];
 				diffuse[d_idx + 1] = tex->pixels[t_idx + 1];
@@ -196,15 +206,15 @@ void plot_road_pixel(int x, int y, void *context) {
 			int py = y + dy;
 
 			/* Bounds check */
-			if (px < 0 || px >= IMG_SIZE || py < 0 || py >= IMG_SIZE) continue;
+			if (px < 0 || px >= img_size || py < 0 || py >= img_size) continue;
 
 			/* Retrieve the road's opacity directly from the blurred alpha mask */
-			unsigned char road_alpha = ctx->blurred_alpha[py * IMG_SIZE + px];
+			unsigned char road_alpha = ctx->blurred_alpha[py * img_size + px];
 
 			/* If the road is completely invisible and outside the city, skip drawing entirely */
 			if (road_alpha == 0) continue;
 
-			int idx = (py * IMG_SIZE + px) * 4;
+			int idx = (py * img_size + px) * 4;
 
 			/* Both the diffuse map and the emittance map are updated */
 			if (ctx->road_tex) {
@@ -267,14 +277,13 @@ static void add_bloom_effect(unsigned char *img, int w, int h)
 	int img_bytes = w * h * 4;
 	unsigned char *temp_space, *orig_img;
 
-
 	/* Save copy of original img */
 	orig_img = malloc(img_bytes);
 	memcpy(orig_img, img, img_bytes);
 
 	/* Blur img */
 	temp_space = malloc(img_bytes);
-	blur_rgba_image(img, temp_space, IMG_SIZE, IMG_SIZE, 2, 2);
+	blur_rgba_image(img, temp_space, img_size, img_size, 2, 2);
 	free(temp_space);
 
 	/* Combine img with orig_img */
@@ -310,10 +319,10 @@ static void draw_small_grid_roads(PlotContext *ctx, int w, int h, int spacing)
 		int startx, stopx;
 		if ((rand() % 1000) < 333) {
 			startx = 0;
-			stopx = IMG_SIZE;
+			stopx = img_size;
 		} else {
-			startx = rand() % (IMG_SIZE / 3);
-			stopx = rand() % (IMG_SIZE / 3) + IMG_SIZE / 2;
+			startx = rand() % (img_size / 3);
+			stopx = rand() % (img_size / 3) + img_size / 2;
 		}
 		bline(startx, y, stopx, y + (rand() % 10 - 5), plot_road_pixel, ctx);
 	}
@@ -323,10 +332,10 @@ static void draw_small_grid_roads(PlotContext *ctx, int w, int h, int spacing)
 		int starty, stopy;
 		if ((rand() % 1000) < 333) {
 			starty = 0;
-			stopy = IMG_SIZE;
+			stopy = img_size;
 		} else {
-			starty = rand() % (IMG_SIZE / 3);
-			stopy = rand() % (IMG_SIZE / 3) + IMG_SIZE / 2;
+			starty = rand() % (img_size / 3);
+			stopy = rand() % (img_size / 3) + img_size / 2;
 		}
 		bline(x, starty, x + (rand() % 10 - 5), stopy, plot_road_pixel, ctx);
 	}
@@ -337,7 +346,7 @@ static void draw_main_artery_roads(PlotContext *ctx, int num_arteries, int w, in
 	/* Thicker main artery roads traversing the image using midpoint displacement */
 	for (int i = 0; i < num_arteries; i++) {
 		int x1 = 0, y1 = rand() % w;
-		int x2 = IMG_SIZE, y2 = rand() % w;
+		int x2 = img_size, y2 = rand() % w;
 		draw_md_line(x1, y1, x2, y2, 4, 30.0f, ctx);
 
 		int x3 = rand() % h, y3 = 0;
@@ -382,7 +391,32 @@ static void draw_roads(PlotContext *ctx, int num_arteries, int grid_road_spacing
 	draw_loop_road(ctx, w, h);
 }
 
-int main() {
+int main(int argc, char *argv[]) {
+	int opt;
+
+	/* Setup getopt_long for command line parsing */
+	static struct option long_options[] = {
+		{"size", required_argument, 0, 's'},
+		{"help", no_argument,       0, 'h'},
+		{0, 0, 0, 0}
+	};
+
+	while ((opt = getopt_long(argc, argv, "s:h", long_options, NULL)) != -1) {
+		switch (opt) {
+			case 's':
+				img_size = atoi(optarg);
+				if (img_size <= 0) {
+					fprintf(stderr, "Error: Image size must be a positive integer.\n");
+					usage(argv[0]);
+				}
+				break;
+			case 'h':
+			case '?':
+			default:
+				usage(argv[0]);
+		}
+	}
+
 	srand((unsigned int)time(NULL));
 
 	/* Initialize texture structures */
@@ -395,19 +429,19 @@ int main() {
 	}
 
 	/* Start with all transparent images for the maps */
-	int img_bytes = IMG_SIZE * IMG_SIZE * 4;
+	int img_bytes = img_size * img_size * 4;
 	unsigned char *diffuse_map = (unsigned char *)calloc(img_bytes, 1);
 	unsigned char *emittance_map = (unsigned char *)calloc(img_bytes, 1);
 
 	/* Draw diffuse map recursive circles */
-	float initial_radius = (0.3f * IMG_SIZE);
-	draw_recursive_circles(diffuse_map, IMG_SIZE / 2, IMG_SIZE / 2, initial_radius, &city_tex);
+	float initial_radius = (0.3f * img_size);
+	draw_recursive_circles(diffuse_map, img_size / 2, img_size / 2, initial_radius, &city_tex);
 
 	/* Extract and blur the alpha mask */
-	unsigned char *raw_alpha = (unsigned char *)malloc(IMG_SIZE * IMG_SIZE);
-	unsigned char *blurred_alpha = (unsigned char *)malloc(IMG_SIZE * IMG_SIZE);
+	unsigned char *raw_alpha = (unsigned char *)malloc(img_size * img_size);
+	unsigned char *blurred_alpha = (unsigned char *)malloc(img_size * img_size);
 
-	for (int i = 0; i < IMG_SIZE * IMG_SIZE; i++) {
+	for (int i = 0; i < img_size * img_size; i++) {
 		raw_alpha[i] = diffuse_map[(i * 4) + 3];
 	}
 
@@ -422,12 +456,12 @@ int main() {
 	ctx.light_tex = &light_tex;
 	ctx.blurred_alpha = blurred_alpha;
 
-	draw_roads(&ctx, 3, 16, IMG_SIZE, IMG_SIZE);
+	draw_roads(&ctx, 3, 16, img_size, img_size);
 
-	add_bloom_effect(emittance_map, IMG_SIZE, IMG_SIZE);
+	add_bloom_effect(emittance_map, img_size, img_size);
 
-	png_utils_write_png_image("diffuse_map.png", diffuse_map, IMG_SIZE, IMG_SIZE, 1, 0);
-	png_utils_write_png_image("emittance_map.png", emittance_map, IMG_SIZE, IMG_SIZE, 1, 0);
+	png_utils_write_png_image("diffuse_map.png", diffuse_map, img_size, img_size, 1, 0);
+	png_utils_write_png_image("emittance_map.png", emittance_map, img_size, img_size, 1, 0);
 
 	free(diffuse_map);
 	free(emittance_map);
@@ -437,7 +471,6 @@ int main() {
 	free(road_tex.pixels);
 	free(light_tex.pixels);
 
-	printf("City decals generated successfully.\n");
+	printf("City decals generated successfully at %dx%d resolution.\n", img_size, img_size);
 	return 0;
 }
-
