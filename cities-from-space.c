@@ -80,11 +80,19 @@ void draw_recursive_circles(unsigned char *diffuse, int cx, int cy, float radius
 	}
 }
 
-/* Custom plot function passed to bline[cite: 1, 3] */
+/* Custom plot function passed to bline */
 void plot_road_pixel(int x, int y, void *context) {
 	PlotContext *ctx = (PlotContext *)context;
 	int t = ctx->thickness;
 	int half_t = t / 2;
+
+	/* Define the center of the image and where the fade should begin/end */
+	float cx = IMG_SIZE / 2.0f;
+	float cy = IMG_SIZE / 2.0f;
+
+	/* Start fading roads slightly outside the main city cluster */
+	float fade_start = (IMG_SIZE / 2.0f) * 0.55f;
+	float fade_end   = (IMG_SIZE / 2.0f) * 0.95f; /* Fully transparent before hitting the absolute edge */
 
 	/* Draw thickness by looping around the center pixel */
 	for (int dy = -half_t; dy <= half_t + (t % 2); dy++) {
@@ -92,11 +100,27 @@ void plot_road_pixel(int x, int y, void *context) {
 			int px = x + dx;
 			int py = y + dy;
 
+			/* Bounds check */
 			if (px < 0 || px >= IMG_SIZE || py < 0 || py >= IMG_SIZE) continue;
+
+			/* 1. Calculate how far this pixel is from the center of the image */
+			float dist = sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
+
+			/* 2. Determine the road's opacity based on its distance */
+			float road_alpha_f = 255.0f;
+			if (dist > fade_start) {
+				road_alpha_f = 255.0f * (1.0f - ((dist - fade_start) / (fade_end - fade_start)));
+				if (road_alpha_f < 0.0f) road_alpha_f = 0.0f;
+			}
+
+			unsigned char road_alpha = (unsigned char)road_alpha_f;
+
+			/* If the road is completely invisible and outside the city, skip drawing entirely */
+			if (road_alpha == 0) continue;
 
 			int idx = (py * IMG_SIZE + px) * 4;
 
-			/* Both the diffuse map and the emittance map are updated[cite: 3] */
+			/* Both the diffuse map and the emittance map are updated */
 			if (ctx->road_tex) {
 				int tx = ((px % ctx->road_tex->w) + ctx->road_tex->w) % ctx->road_tex->w;
 				int ty = ((py % ctx->road_tex->h) + ctx->road_tex->h) % ctx->road_tex->h;
@@ -105,10 +129,17 @@ void plot_road_pixel(int x, int y, void *context) {
 				ctx->diffuse[idx]     = ctx->road_tex->pixels[t_idx];
 				ctx->diffuse[idx + 1] = ctx->road_tex->pixels[t_idx + 1];
 				ctx->diffuse[idx + 2] = ctx->road_tex->pixels[t_idx + 2];
-				ctx->diffuse[idx + 3] = 255;
+
+				/* 3. Alpha Blending Logic:
+				   Take the MAXIMUM of the existing alpha (from the recursive circles)
+				   and our new fading road alpha. This ensures roads inside the city
+				   stay solid, but roads stretching into the void fade away. */
+				if (road_alpha > ctx->diffuse[idx + 3]) {
+					ctx->diffuse[idx + 3] = road_alpha;
+				}
 			}
 
-			/* Emittance map samples from the lights texture[cite: 3] */
+			/* Emittance map samples from the lights texture */
 			if (ctx->light_tex) {
 				int tx = ((px % ctx->light_tex->w) + ctx->light_tex->w) % ctx->light_tex->w;
 				int ty = ((py % ctx->light_tex->h) + ctx->light_tex->h) % ctx->light_tex->h;
@@ -117,7 +148,11 @@ void plot_road_pixel(int x, int y, void *context) {
 				ctx->emittance[idx]     = ctx->light_tex->pixels[t_idx];
 				ctx->emittance[idx + 1] = ctx->light_tex->pixels[t_idx + 1];
 				ctx->emittance[idx + 2] = ctx->light_tex->pixels[t_idx + 2];
-				ctx->emittance[idx + 3] = 255;
+
+				/* Apply the exact same maximum-alpha logic to the emittance map */
+				if (road_alpha > ctx->emittance[idx + 3]) {
+					ctx->emittance[idx + 3] = road_alpha;
+				}
 			}
 		}
 	}
