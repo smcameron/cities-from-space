@@ -22,7 +22,51 @@ typedef struct {
 	Texture *road_tex;
 	Texture *light_tex;
 	int thickness;
+	unsigned char *blurred_alpha;
 } PlotContext;
+
+/* Simple separable box blur for an 8-bit alpha mask */
+void blur_alpha_mask(unsigned char *src, unsigned char *dst, int radius, int passes) {
+	int w = IMG_SIZE;
+	int h = IMG_SIZE;
+	unsigned char *temp = (unsigned char *)malloc(w * h);
+
+	for (int p = 0; p < passes; p++) {
+		/* Horizontal pass */
+		for (int y = 0; y < h; y++) {
+			for (int x = 0; x < w; x++) {
+				int sum = 0, count = 0;
+				for (int k = -radius; k <= radius; k++) {
+					int nx = x + k;
+					if (nx >= 0 && nx < w) {
+						sum += src[y * w + nx];
+						count++;
+					}
+				}
+				temp[y * w + x] = sum / count;
+			}
+		}
+		/* Vertical pass */
+		for (int y = 0; y < h; y++) {
+			for (int x = 0; x < w; x++) {
+				int sum = 0, count = 0;
+				for (int k = -radius; k <= radius; k++) {
+					int ny = y + k;
+					if (ny >= 0 && ny < h) {
+						sum += temp[ny * w + x];
+						count++;
+					}
+				}
+				dst[y * w + x] = sum / count;
+			}
+		}
+		/* Copy dst back to src for the next pass */
+		for (int i = 0; i < w * h; i++) {
+			src[i] = dst[i];
+		}
+	}
+	free(temp);
+}
 
 /* Helper to load PNG textures */
 int load_texture(const char *filename, Texture *tex) {
@@ -85,14 +129,6 @@ void plot_road_pixel(int x, int y, void *context) {
 	int t = ctx->thickness;
 	int half_t = t / 2;
 
-	/* Define the center of the image and where the fade should begin/end */
-	float cx = IMG_SIZE / 2.0f;
-	float cy = IMG_SIZE / 2.0f;
-
-	/* Start fading roads slightly outside the main city cluster */
-	float fade_start = (IMG_SIZE / 2.0f) * 0.55f;
-	float fade_end   = (IMG_SIZE / 2.0f) * 0.95f; /* Fully transparent before hitting the absolute edge */
-
 	/* Draw thickness by looping around the center pixel */
 	for (int dy = -half_t; dy <= half_t + (t % 2); dy++) {
 		for (int dx = -half_t; dx <= half_t + (t % 2); dx++) {
@@ -102,17 +138,8 @@ void plot_road_pixel(int x, int y, void *context) {
 			/* Bounds check */
 			if (px < 0 || px >= IMG_SIZE || py < 0 || py >= IMG_SIZE) continue;
 
-			/* Calculate how far this pixel is from the center of the image */
-			float dist = sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
-
-			/* Determine the road's opacity based on its distance */
-			float road_alpha_f = 255.0f;
-			if (dist > fade_start) {
-				road_alpha_f = 255.0f * (1.0f - ((dist - fade_start) / (fade_end - fade_start)));
-				if (road_alpha_f < 0.0f) road_alpha_f = 0.0f;
-			}
-
-			unsigned char road_alpha = (unsigned char)road_alpha_f;
+			/* Retrieve the road's opacity directly from the blurred alpha mask */
+			unsigned char road_alpha = ctx->blurred_alpha[py * IMG_SIZE + px];
 
 			/* If the road is completely invisible and outside the city, skip drawing entirely */
 			if (road_alpha == 0) continue;
@@ -131,8 +158,7 @@ void plot_road_pixel(int x, int y, void *context) {
 
 				/* Alpha Blending Logic:
 				   Take the MAXIMUM of the existing alpha (from the recursive circles)
-				   and our new fading road alpha. This ensures roads inside the city
-				   stay solid, but roads stretching into the void fade away. */
+				   and our new fading road alpha. */
 				if (road_alpha > ctx->diffuse[idx + 3]) {
 					ctx->diffuse[idx + 3] = road_alpha;
 				}
@@ -196,12 +222,24 @@ int main() {
 	float initial_radius = (0.3f * IMG_SIZE);
 	draw_recursive_circles(diffuse_map, IMG_SIZE / 2, IMG_SIZE / 2, initial_radius, &city_tex);
 
+	/* Extract and blur the alpha mask */
+	unsigned char *raw_alpha = (unsigned char *)malloc(IMG_SIZE * IMG_SIZE);
+	unsigned char *blurred_alpha = (unsigned char *)malloc(IMG_SIZE * IMG_SIZE);
+
+	for (int i = 0; i < IMG_SIZE * IMG_SIZE; i++) {
+		raw_alpha[i] = diffuse_map[(i * 4) + 3];
+	}
+
+	/* Tweak the radius and passes to change the length and smoothness of the road fade */
+	blur_alpha_mask(raw_alpha, blurred_alpha, 15, 3);
+
 	/* Context for road drawing operations */
 	PlotContext ctx;
 	ctx.diffuse = diffuse_map;
 	ctx.emittance = emittance_map;
 	ctx.road_tex = &road_tex;
 	ctx.light_tex = &light_tex;
+	ctx.blurred_alpha = blurred_alpha;
 
 	/* Small roads in a semi-regular grid */
 	ctx.thickness = 1;
