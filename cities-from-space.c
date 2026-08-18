@@ -72,9 +72,7 @@ void blur_alpha_mask(unsigned char *src, unsigned char *dst, int radius, int pas
 
 /* Separable box blur for 4-channel RGBA images to create a glow effect */
 /* Output is src.  dst is temporary working space */
-void blur_rgba_image(unsigned char *src, unsigned char *dst, int radius, int passes) {
-	int w = IMG_SIZE;
-	int h = IMG_SIZE;
+void blur_rgba_image(unsigned char *src, unsigned char *dst, int w, int h, int radius, int passes) {
 	unsigned char *temp = (unsigned char *)malloc(w * h * 4);
 
 	for (int p = 0; p < passes; p++) {
@@ -263,6 +261,44 @@ void draw_md_line(int x1, int y1, int x2, int y2, int depth, float displacement,
 	draw_md_line(xm, ym, x2, y2, depth - 1, displacement / 2.0f, ctx);
 }
 
+/* Adds a bloom effect to img */
+static void add_bloom_effect(unsigned char *img, int w, int h)
+{
+	int img_bytes = w * h * 4;
+	unsigned char *temp_space, *orig_img;
+
+
+	/* Save copy of original img */
+	orig_img = malloc(img_bytes);
+	memcpy(orig_img, img, img_bytes);
+
+	/* Blur img */
+	temp_space = malloc(img_bytes);
+	blur_rgba_image(img, temp_space, IMG_SIZE, IMG_SIZE, 2, 2);
+	free(temp_space);
+
+	/* Combine img with orig_img */
+	for (int i = 0; i < img_bytes; i += 4) {
+		unsigned char *sharp = &orig_img[i];
+		unsigned char *blur  = &img[i];
+
+		int r = (sharp[0] + blur[0]) / 2;
+		int g = (sharp[1] + blur[1]) / 2;
+		int b = (sharp[2] + blur[2]) / 2;
+
+		blur[0] = (r > 255) ? 255 : (unsigned char)r;
+		blur[1] = (g > 255) ? 255 : (unsigned char)g;
+		blur[2] = (b > 255) ? 255 : (unsigned char)b;
+
+		/* Alpha composition: A + B - (A * B) / 255 */
+		int a_sharp = sharp[3];
+		int a_blur  = blur[3];
+		int a_out   = a_sharp + a_blur - (a_sharp * a_blur) / 255;
+
+		blur[3] = (unsigned char)a_out;
+	}
+}
+
 int main() {
 	srand((unsigned int)time(NULL));
 
@@ -366,40 +402,7 @@ int main() {
 		draw_md_line(pts_x[i], pts_y[i], pts_x[next_i], pts_y[next_i], 3, 15.0f, &ctx);
 	}
 
-
-	/* Create a Bloom effect by combining sharp and blurred emittance maps */
-	/* Save a copy of the original sharp emittance map */
-	unsigned char *original_emittance = (unsigned char *) malloc(img_bytes);
-	memcpy(original_emittance, emittance_map, img_bytes);
-
-	/* Blur the emittance map (this modifies emittance_map in place) */
-	unsigned char *temp_space = (unsigned char *) malloc(img_bytes);
-	/* Tweak radius and passes for different glow profiles */
-	blur_rgba_image(emittance_map, temp_space, 2, 2);
-	free(temp_space);
-
-	/* Add some bloom */
-	for (int i = 0; i < img_bytes; i += 4) {
-		unsigned char *sharp = &original_emittance[i];
-		unsigned char *blur  = &emittance_map[i];
-
-		int r = (sharp[0] + blur[0]) / 2;
-		int g = (sharp[1] + blur[1]) / 2;
-		int b = (sharp[2] + blur[2]) / 2;
-
-		blur[0] = (r > 255) ? 255 : (unsigned char)r;
-		blur[1] = (g > 255) ? 255 : (unsigned char)g;
-		blur[2] = (b > 255) ? 255 : (unsigned char)b;
-
-		/* Alpha composition: A + B - (A * B) / 255 */
-		int a_sharp = sharp[3];
-		int a_blur  = blur[3];
-		int a_out   = a_sharp + a_blur - (a_sharp * a_blur) / 255;
-
-		blur[3] = (unsigned char)a_out;
-	}
-
-	free(original_emittance);
+	add_bloom_effect(emittance_map, IMG_SIZE, IMG_SIZE);
 
 	png_utils_write_png_image("diffuse_map.png", diffuse_map, IMG_SIZE, IMG_SIZE, 1, 0);
 	png_utils_write_png_image("emittance_map.png", emittance_map, IMG_SIZE, IMG_SIZE, 1, 0);
