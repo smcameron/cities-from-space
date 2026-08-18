@@ -27,7 +27,7 @@ typedef struct {
 /* Helper to load PNG textures */
 int load_texture(const char *filename, Texture *tex) {
 	char whynot[256];
-	/* Using png_utils_read_png_image as specified[cite: 2] */
+	/* Using png_utils_read_png_image as specified */
 	tex->pixels = (unsigned char *)png_utils_read_png_image(
 		filename, 0, 0, 0, &tex->w, &tex->h, &tex->hasAlpha, whynot, sizeof(whynot)
 	);
@@ -38,9 +38,9 @@ int load_texture(const char *filename, Texture *tex) {
 	return 1;
 }
 
-/* Recursive function to draw city diffuse base using circles[cite: 3] */
+/* Recursive function to draw city diffuse base using circles */
 void draw_recursive_circles(unsigned char *diffuse, int cx, int cy, float radius, Texture *tex) {
-	/* Stop recursing when circles are a few pixels in diameter[cite: 3] */
+	/* Stop recursing when circles are a few pixels in diameter */
 	if (radius < 3.0f) return;
 
 	int r = (int)radius;
@@ -49,7 +49,7 @@ void draw_recursive_circles(unsigned char *diffuse, int cx, int cy, float radius
 			if (x < 0 || x >= IMG_SIZE || y < 0 || y >= IMG_SIZE) continue;
 
 			if ((x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r) {
-				/* Sample color from the city texture mapping coordinates[cite: 3] */
+				/* Sample color from the city texture mapping coordinates */
 				int tx = ((x % tex->w) + tex->w) % tex->w;
 				int ty = ((y % tex->h) + tex->h) % tex->h;
 				int t_idx = (ty * tex->w + tx) * (tex->hasAlpha ? 4 : 3);
@@ -63,13 +63,13 @@ void draw_recursive_circles(unsigned char *diffuse, int cx, int cy, float radius
 		}
 	}
 
-	/* Recurse with 4 or 5 smaller circles near the edges[cite: 3] */
+	/* Recurse with 4 or 5 smaller circles near the edges */
 	int num_children = 4 + (rand() % 2);
 	for (int i = 0; i < num_children; i++) {
 		/* Distribute evenly but add some random rotation jitter */
 		float angle = (2.0f * 3.14159265f * i) / num_children + ((rand() % 100) / 100.0f);
 
-		/* Each smaller circle is between 20 and 40 percent of the parent size[cite: 3] */
+		/* Each smaller circle is between 20 and 40 percent of the parent size */
 		float size_factor = 0.2f + ((rand() % 21) / 100.0f);
 		float new_r = radius * size_factor;
 
@@ -103,10 +103,10 @@ void plot_road_pixel(int x, int y, void *context) {
 			/* Bounds check */
 			if (px < 0 || px >= IMG_SIZE || py < 0 || py >= IMG_SIZE) continue;
 
-			/* 1. Calculate how far this pixel is from the center of the image */
+			/* Calculate how far this pixel is from the center of the image */
 			float dist = sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
 
-			/* 2. Determine the road's opacity based on its distance */
+			/* Determine the road's opacity based on its distance */
 			float road_alpha_f = 255.0f;
 			if (dist > fade_start) {
 				road_alpha_f = 255.0f * (1.0f - ((dist - fade_start) / (fade_end - fade_start)));
@@ -130,7 +130,7 @@ void plot_road_pixel(int x, int y, void *context) {
 				ctx->diffuse[idx + 1] = ctx->road_tex->pixels[t_idx + 1];
 				ctx->diffuse[idx + 2] = ctx->road_tex->pixels[t_idx + 2];
 
-				/* 3. Alpha Blending Logic:
+				/* Alpha Blending Logic:
 				   Take the MAXIMUM of the existing alpha (from the recursive circles)
 				   and our new fading road alpha. This ensures roads inside the city
 				   stay solid, but roads stretching into the void fade away. */
@@ -158,10 +158,10 @@ void plot_road_pixel(int x, int y, void *context) {
 	}
 }
 
-/* Draws a line using midpoint displacement to create curves[cite: 3] */
+/* Draws a line using midpoint displacement to create curves */
 void draw_md_line(int x1, int y1, int x2, int y2, int depth, float displacement, PlotContext *ctx) {
 	if (depth == 0) {
-		bline(x1, y1, x2, y2, plot_road_pixel, ctx); /* Rely on bline implementation[cite: 1] */
+		bline(x1, y1, x2, y2, plot_road_pixel, ctx); /* Rely on bline implementation */
 		return;
 	}
 
@@ -188,13 +188,13 @@ int main() {
 		return 1;
 	}
 
-	/* 1. Start with all transparent images for the maps[cite: 3] */
+	/* Start with all transparent images for the maps */
 	int img_bytes = IMG_SIZE * IMG_SIZE * 4;
 	unsigned char *diffuse_map = (unsigned char *)calloc(img_bytes, 1);
 	unsigned char *emittance_map = (unsigned char *)calloc(img_bytes, 1);
 
-	/* 2. Draw diffuse map recursive circles[cite: 3] */
-	float initial_radius = (IMG_SIZE / 2.0f) * 0.9f; /* A little smaller than image size[cite: 3] */
+	/* Draw diffuse map recursive circles */
+	float initial_radius = (IMG_SIZE / 2.0f) * 0.9f; /* A little smaller than image size */
 	draw_recursive_circles(diffuse_map, IMG_SIZE / 2, IMG_SIZE / 2, initial_radius, &city_tex);
 
 	/* Context for road drawing operations */
@@ -204,7 +204,7 @@ int main() {
 	ctx.road_tex = &road_tex;
 	ctx.light_tex = &light_tex;
 
-	/* 3. Small roads in a semi-regular grid[cite: 3] */
+	/* Small roads in a semi-regular grid */
 	ctx.thickness = 1;
 	int grid_spacing = 16;
 	for (int y = grid_spacing; y < IMG_SIZE; y += grid_spacing + (rand() % 5 - 2)) {
@@ -214,7 +214,7 @@ int main() {
 		bline(x, 0, x + (rand() % 10 - 5), IMG_SIZE, plot_road_pixel, &ctx);
 	}
 
-	/* 4. Thicker main artery roads traversing the image using midpoint displacement[cite: 3] */
+	/* Thicker main artery roads traversing the image using midpoint displacement */
 	ctx.thickness = 3;
 	int num_arteries = 3;
 	for (int i = 0; i < num_arteries; i++) {
@@ -227,7 +227,7 @@ int main() {
 		draw_md_line(x3, y3, x4, y4, 4, 30.0f, &ctx);
 	}
 
-	/* 5. A loop road defined by vertices (e.g. an octagon) using midpoint displacement[cite: 3] */
+	/* A loop road defined by vertices (e.g. an octagon) using midpoint displacement */
 	ctx.thickness = 2;
 	int num_vertices = 8;
 	int loop_radius = IMG_SIZE / 3;
@@ -247,7 +247,7 @@ int main() {
 		draw_md_line(pts_x[i], pts_y[i], pts_x[next_i], pts_y[next_i], 3, 15.0f, &ctx);
 	}
 
-	/* Output final PNG files using png_utils[cite: 2, 3] */
+	/* Output final PNG files using png_utils */
 	png_utils_write_png_image("diffuse_map.png", diffuse_map, IMG_SIZE, IMG_SIZE, 1, 0);
 	png_utils_write_png_image("emittance_map.png", emittance_map, IMG_SIZE, IMG_SIZE, 1, 0);
 
