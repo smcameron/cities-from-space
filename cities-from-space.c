@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
+#include <string.h>
+
 #include "bline.h"
 #include "png_utils.h"
 
@@ -62,6 +64,66 @@ void blur_alpha_mask(unsigned char *src, unsigned char *dst, int radius, int pas
 		}
 		/* Copy dst back to src for the next pass */
 		for (int i = 0; i < w * h; i++) {
+			src[i] = dst[i];
+		}
+	}
+	free(temp);
+}
+
+/* Separable box blur for 4-channel RGBA images to create a glow effect */
+/* Output is src.  dst is temporary working space */
+void blur_rgba_image(unsigned char *src, unsigned char *dst, int radius, int passes) {
+	int w = IMG_SIZE;
+	int h = IMG_SIZE;
+	unsigned char *temp = (unsigned char *)malloc(w * h * 4);
+
+	for (int p = 0; p < passes; p++) {
+		/* Horizontal pass */
+		for (int y = 0; y < h; y++) {
+			for (int x = 0; x < w; x++) {
+				int r_sum = 0, g_sum = 0, b_sum = 0, a_sum = 0, count = 0;
+				for (int k = -radius; k <= radius; k++) {
+					int nx = x + k;
+					if (nx >= 0 && nx < w) {
+						int idx = (y * w + nx) * 4;
+						r_sum += src[idx];
+						g_sum += src[idx + 1];
+						b_sum += src[idx + 2];
+						a_sum += src[idx + 3];
+						count++;
+					}
+				}
+				int out_idx = (y * w + x) * 4;
+				temp[out_idx]     = r_sum / count;
+				temp[out_idx + 1] = g_sum / count;
+				temp[out_idx + 2] = b_sum / count;
+				temp[out_idx + 3] = a_sum / count;
+			}
+		}
+		/* Vertical pass */
+		for (int y = 0; y < h; y++) {
+			for (int x = 0; x < w; x++) {
+				int r_sum = 0, g_sum = 0, b_sum = 0, a_sum = 0, count = 0;
+				for (int k = -radius; k <= radius; k++) {
+					int ny = y + k;
+					if (ny >= 0 && ny < h) {
+						int idx = (ny * w + x) * 4;
+						r_sum += temp[idx];
+						g_sum += temp[idx + 1];
+						b_sum += temp[idx + 2];
+						a_sum += temp[idx + 3];
+						count++;
+					}
+				}
+				int out_idx = (y * w + x) * 4;
+				dst[out_idx]     = r_sum / count;
+				dst[out_idx + 1] = g_sum / count;
+				dst[out_idx + 2] = b_sum / count;
+				dst[out_idx + 3] = a_sum / count;
+			}
+		}
+		/* Copy dst back to src for the next pass */
+		for (int i = 0; i < w * h * 4; i++) {
 			src[i] = dst[i];
 		}
 	}
@@ -304,13 +366,48 @@ int main() {
 		draw_md_line(pts_x[i], pts_y[i], pts_x[next_i], pts_y[next_i], 3, 15.0f, &ctx);
 	}
 
-	/* Output final PNG files using png_utils */
+
+	/* Create a Bloom effect by combining sharp and blurred emittance maps */
+	/* Save a copy of the original sharp emittance map */
+	unsigned char *original_emittance = (unsigned char *) malloc(img_bytes);
+	memcpy(original_emittance, emittance_map, img_bytes);
+
+	/* Blur the emittance map (this modifies emittance_map in place) */
+	unsigned char *temp_space = (unsigned char *) malloc(img_bytes);
+	/* Tweak radius and passes for different glow profiles */
+	blur_rgba_image(emittance_map, temp_space, 2, 2);
+	free(temp_space);
+
+	/* Add some bloom */
+	for (int i = 0; i < img_bytes; i += 4) {
+		unsigned char *sharp = &original_emittance[i];
+		unsigned char *blur  = &emittance_map[i];
+
+		int r = (sharp[0] + blur[0]) / 2;
+		int g = (sharp[1] + blur[1]) / 2;
+		int b = (sharp[2] + blur[2]) / 2;
+
+		blur[0] = (r > 255) ? 255 : (unsigned char)r;
+		blur[1] = (g > 255) ? 255 : (unsigned char)g;
+		blur[2] = (b > 255) ? 255 : (unsigned char)b;
+
+		/* Alpha composition: A + B - (A * B) / 255 */
+		int a_sharp = sharp[3];
+		int a_blur  = blur[3];
+		int a_out   = a_sharp + a_blur - (a_sharp * a_blur) / 255;
+
+		blur[3] = (unsigned char)a_out;
+	}
+
+	free(original_emittance);
+
 	png_utils_write_png_image("diffuse_map.png", diffuse_map, IMG_SIZE, IMG_SIZE, 1, 0);
 	png_utils_write_png_image("emittance_map.png", emittance_map, IMG_SIZE, IMG_SIZE, 1, 0);
 
-	/* Clean up memory */
 	free(diffuse_map);
 	free(emittance_map);
+	free(raw_alpha);
+	free(blurred_alpha);
 	free(city_tex.pixels);
 	free(road_tex.pixels);
 	free(light_tex.pixels);
@@ -318,3 +415,4 @@ int main() {
 	printf("City decals generated successfully.\n");
 	return 0;
 }
+
