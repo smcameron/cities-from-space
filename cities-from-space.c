@@ -8,6 +8,7 @@
 #include "bline.h"
 #include "png_utils.h"
 
+/* Global variable for image dimensions, defaults to 512 */
 int img_size = 512;
 
 /* Structure to hold loaded texture data */
@@ -33,6 +34,7 @@ void usage(const char *prog_name) {
 	fprintf(stderr, "Usage: %s [options]\n", prog_name);
 	fprintf(stderr, "Options:\n");
 	fprintf(stderr, "  -s, --size <pixels>   Set the image dimensions (must be square). Default is 512.\n");
+	fprintf(stderr, "  -n, --num <count>     Number of cities to generate (combines into an atlas). Default is 1.\n");
 	fprintf(stderr, "  -h, --help            Show this help message.\n");
 	exit(EXIT_FAILURE);
 }
@@ -306,6 +308,8 @@ static void add_bloom_effect(unsigned char *img, int w, int h)
 
 		blur[3] = (unsigned char)a_out;
 	}
+
+	free(orig_img);
 }
 
 static void draw_small_grid_roads(PlotContext *ctx, int w, int h, int spacing)
@@ -393,20 +397,29 @@ static void draw_roads(PlotContext *ctx, int num_arteries, int grid_road_spacing
 
 int main(int argc, char *argv[]) {
 	int opt;
+	int num_cities = 1;
 
 	/* Setup getopt_long for command line parsing */
 	static struct option long_options[] = {
 		{"size", required_argument, 0, 's'},
+		{"num",  required_argument, 0, 'n'},
 		{"help", no_argument,       0, 'h'},
 		{0, 0, 0, 0}
 	};
 
-	while ((opt = getopt_long(argc, argv, "s:h", long_options, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "s:n:h", long_options, NULL)) != -1) {
 		switch (opt) {
 			case 's':
 				img_size = atoi(optarg);
 				if (img_size <= 0) {
 					fprintf(stderr, "Error: Image size must be a positive integer.\n");
+					usage(argv[0]);
+				}
+				break;
+			case 'n':
+				num_cities = atoi(optarg);
+				if (num_cities <= 0) {
+					fprintf(stderr, "Error: Number of cities must be a positive integer.\n");
 					usage(argv[0]);
 				}
 				break;
@@ -428,41 +441,92 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	/* Start with all transparent images for the maps */
+	/* Calculate atlas dimensions to be as close to square as possible */
+	int atlas_cols = (int)ceil(sqrt(num_cities));
+	int atlas_rows = (int)ceil((double)num_cities / atlas_cols);
+
+	int atlas_w = atlas_cols * img_size;
+	int atlas_h = atlas_rows * img_size;
+
+	/* Allocate buffers for the final atlas images */
+	unsigned char *atlas_diffuse = (unsigned char *)calloc(atlas_w * atlas_h * 4, 1);
+	unsigned char *atlas_emittance = (unsigned char *)calloc(atlas_w * atlas_h * 4, 1);
+
+	/* Allocate working buffers for individual city generation */
 	int img_bytes = img_size * img_size * 4;
-	unsigned char *diffuse_map = (unsigned char *)calloc(img_bytes, 1);
-	unsigned char *emittance_map = (unsigned char *)calloc(img_bytes, 1);
-
-	/* Draw diffuse map recursive circles */
-	float initial_radius = (0.3f * img_size);
-	draw_recursive_circles(diffuse_map, img_size / 2, img_size / 2, initial_radius, &city_tex);
-
-	/* Extract and blur the alpha mask */
+	unsigned char *diffuse_map = (unsigned char *)malloc(img_bytes);
+	unsigned char *emittance_map = (unsigned char *)malloc(img_bytes);
 	unsigned char *raw_alpha = (unsigned char *)malloc(img_size * img_size);
 	unsigned char *blurred_alpha = (unsigned char *)malloc(img_size * img_size);
 
-	for (int i = 0; i < img_size * img_size; i++) {
-		raw_alpha[i] = diffuse_map[(i * 4) + 3];
+	/* Generate 'num_cities' cities and copy each into the atlas */
+	for (int c_idx = 0; c_idx < num_cities; c_idx++) {
+
+		/* Start with transparent images for the maps for the current city */
+		memset(diffuse_map, 0, img_bytes);
+		memset(emittance_map, 0, img_bytes);
+
+		/* Draw diffuse map recursive circles */
+		float initial_radius = (0.3f * img_size);
+		draw_recursive_circles(diffuse_map, img_size / 2, img_size / 2, initial_radius, &city_tex);
+
+		/* Extract and blur the alpha mask */
+		for (int i = 0; i < img_size * img_size; i++) {
+			raw_alpha[i] = diffuse_map[(i * 4) + 3];
+		}
+
+		/* Tweak the radius and passes to change the length and smoothness of the road fade */
+		blur_alpha_mask(raw_alpha, blurred_alpha, 15, 3);
+
+		/* Context for road drawing operations */
+		PlotContext ctx;
+		ctx.diffuse = diffuse_map;
+		ctx.emittance = emittance_map;
+		ctx.road_tex = &road_tex;
+		ctx.light_tex = &light_tex;
+		ctx.blurred_alpha = blurred_alpha;
+
+		draw_roads(&ctx, 3, 16, img_size, img_size);
+
+		add_bloom_effect(emittance_map, img_size, img_size);
+
+		/* Calculate atlas grid coordinates for the current city */
+		int atlas_row = c_idx / atlas_cols;
+		int atlas_col = c_idx % atlas_cols;
+
+		/* Copy the finished single city maps into the main atlas */
+		for (int y = 0; y < img_size; y++) {
+			int dest_y = atlas_row * img_size + y;
+			for (int x = 0; x < img_size; x++) {
+				int dest_x = atlas_col * img_size + x;
+
+				int src_idx = (y * img_size + x) * 4;
+				int dst_idx = (dest_y * atlas_w + dest_x) * 4;
+
+				/* Copy Diffuse pixel */
+				atlas_diffuse[dst_idx]     = diffuse_map[src_idx];
+				atlas_diffuse[dst_idx + 1] = diffuse_map[src_idx + 1];
+				atlas_diffuse[dst_idx + 2] = diffuse_map[src_idx + 2];
+				atlas_diffuse[dst_idx + 3] = diffuse_map[src_idx + 3];
+
+				/* Copy Emittance pixel */
+				atlas_emittance[dst_idx]     = emittance_map[src_idx];
+				atlas_emittance[dst_idx + 1] = emittance_map[src_idx + 1];
+				atlas_emittance[dst_idx + 2] = emittance_map[src_idx + 2];
+				atlas_emittance[dst_idx + 3] = emittance_map[src_idx + 3];
+			}
+		}
+
+		printf("Generated city %d of %d...\n", c_idx + 1, num_cities);
 	}
 
-	/* Tweak the radius and passes to change the length and smoothness of the road fade */
-	blur_alpha_mask(raw_alpha, blurred_alpha, 15, 3);
+	/* Write out the final atlas images */
+	png_utils_write_png_image("diffuse_map.png", atlas_diffuse, atlas_w, atlas_h, 1, 0);
+	png_utils_write_png_image("emittance_map.png", atlas_emittance, atlas_w, atlas_h, 1, 0);
 
-	/* Context for road drawing operations */
-	PlotContext ctx;
-	ctx.diffuse = diffuse_map;
-	ctx.emittance = emittance_map;
-	ctx.road_tex = &road_tex;
-	ctx.light_tex = &light_tex;
-	ctx.blurred_alpha = blurred_alpha;
-
-	draw_roads(&ctx, 3, 16, img_size, img_size);
-
-	add_bloom_effect(emittance_map, img_size, img_size);
-
-	png_utils_write_png_image("diffuse_map.png", diffuse_map, img_size, img_size, 1, 0);
-	png_utils_write_png_image("emittance_map.png", emittance_map, img_size, img_size, 1, 0);
-
+	/* Clean up */
+	free(atlas_diffuse);
+	free(atlas_emittance);
 	free(diffuse_map);
 	free(emittance_map);
 	free(raw_alpha);
@@ -471,6 +535,9 @@ int main(int argc, char *argv[]) {
 	free(road_tex.pixels);
 	free(light_tex.pixels);
 
-	printf("City decals generated successfully at %dx%d resolution.\n", img_size, img_size);
+	printf("\nAtlas generation complete: %d cities packed into a %dx%d pixel image grid (%d columns x %d rows).\n",
+			num_cities, atlas_w, atlas_h, atlas_cols, atlas_rows);
+
 	return 0;
 }
+
