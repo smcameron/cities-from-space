@@ -299,6 +299,89 @@ static void add_bloom_effect(unsigned char *img, int w, int h)
 	}
 }
 
+static void draw_small_grid_roads(PlotContext *ctx, int w, int h, int spacing)
+{
+	int grid_spacing = spacing;
+	/* Small roads in a semi-regular grid */
+	ctx->thickness = 1;
+	for (int y = grid_spacing; y < h; y += grid_spacing + (rand() % 5 - 2)) {
+		if (rand() % 1000 < 300) /* skip some grid lines */
+			continue;
+		int startx, stopx;
+		if ((rand() % 1000) < 333) {
+			startx = 0;
+			stopx = IMG_SIZE;
+		} else {
+			startx = rand() % (IMG_SIZE / 3);
+			stopx = rand() % (IMG_SIZE / 3) + IMG_SIZE / 2;
+		}
+		bline(startx, y, stopx, y + (rand() % 10 - 5), plot_road_pixel, ctx);
+	}
+	for (int x = grid_spacing; x < w; x += grid_spacing + (rand() % 5 - 2)) {
+		if (rand() % 1000 < 300) /* skip some grid lines */
+			continue;
+		int starty, stopy;
+		if ((rand() % 1000) < 333) {
+			starty = 0;
+			stopy = IMG_SIZE;
+		} else {
+			starty = rand() % (IMG_SIZE / 3);
+			stopy = rand() % (IMG_SIZE / 3) + IMG_SIZE / 2;
+		}
+		bline(x, starty, x + (rand() % 10 - 5), stopy, plot_road_pixel, ctx);
+	}
+}
+
+static void draw_main_artery_roads(PlotContext *ctx, int num_arteries, int w, int h)
+{
+	/* Thicker main artery roads traversing the image using midpoint displacement */
+	for (int i = 0; i < num_arteries; i++) {
+		int x1 = 0, y1 = rand() % w;
+		int x2 = IMG_SIZE, y2 = rand() % w;
+		draw_md_line(x1, y1, x2, y2, 4, 30.0f, ctx);
+
+		int x3 = rand() % h, y3 = 0;
+		int x4 = rand() % h, y4 = h;
+		draw_md_line(x3, y3, x4, y4, 4, 30.0f, ctx);
+	}
+}
+
+static void draw_loop_road(PlotContext *ctx, int w, int h)
+{
+	int num_vertices = 8;
+	int m = w < h ? w : h;
+	int loop_radius = m / 3;
+	int loop_cx = w / 2;
+	int loop_cy = h / 2;
+
+	int pts_x[8], pts_y[8];
+	for (int i = 0; i < num_vertices; i++) {
+		float angle = (2.0f * 3.14159265f * i) / num_vertices;
+		/* Slightly squash and jitter the points */
+		pts_x[i] = loop_cx + (int)(loop_radius * cos(angle) * (1.0f + (rand()%20 - 10)/100.0f));
+		pts_y[i] = loop_cy + (int)(loop_radius * sin(angle) * (0.8f + (rand()%20 - 10)/100.0f));
+	}
+	for (int i = 0; i < num_vertices; i++) {
+		int next_i = (i + 1) % num_vertices;
+		draw_md_line(pts_x[i], pts_y[i], pts_x[next_i], pts_y[next_i], 3, 15.0f, ctx);
+	}
+}
+
+static void draw_roads(PlotContext *ctx, int num_arteries, int grid_road_spacing, int w, int h)
+{
+	/* Small roads in a semi-regular grid */
+	ctx->thickness = 1;
+	draw_small_grid_roads(ctx, w, h, grid_road_spacing);
+
+	/* Thicker main artery roads */
+	ctx->thickness = 3;
+	draw_main_artery_roads(ctx, num_arteries, w, h);
+
+	/* A loop road */
+	ctx->thickness = 2;
+	draw_loop_road(ctx, w, h);
+}
+
 int main() {
 	srand((unsigned int)time(NULL));
 
@@ -339,68 +422,7 @@ int main() {
 	ctx.light_tex = &light_tex;
 	ctx.blurred_alpha = blurred_alpha;
 
-	/* Small roads in a semi-regular grid */
-	ctx.thickness = 1;
-	int grid_spacing = 16;
-	for (int y = grid_spacing; y < IMG_SIZE; y += grid_spacing + (rand() % 5 - 2)) {
-		if (rand() % 1000 < 300) /* skip some grid lines */
-			continue;
-		int startx, stopx;
-		if ((rand() % 1000) < 333) {
-			startx = 0;
-			stopx = IMG_SIZE;
-		} else {
-			startx = rand() % (IMG_SIZE / 3);
-			stopx = rand() % (IMG_SIZE / 3) + IMG_SIZE / 2;
-		}
-		bline(startx, y, stopx, y + (rand() % 10 - 5), plot_road_pixel, &ctx);
-	}
-	for (int x = grid_spacing; x < IMG_SIZE; x += grid_spacing + (rand() % 5 - 2)) {
-		if (rand() % 1000 < 300) /* skip some grid lines */
-			continue;
-		int starty, stopy;
-		if ((rand() % 1000) < 333) {
-			starty = 0;
-			stopy = IMG_SIZE;
-		} else {
-			starty = rand() % (IMG_SIZE / 3);
-			stopy = rand() % (IMG_SIZE / 3) + IMG_SIZE / 2;
-		}
-		bline(x, starty, x + (rand() % 10 - 5), stopy, plot_road_pixel, &ctx);
-	}
-
-	/* Thicker main artery roads traversing the image using midpoint displacement */
-	ctx.thickness = 3;
-	int num_arteries = 3;
-	for (int i = 0; i < num_arteries; i++) {
-		int x1 = 0, y1 = rand() % IMG_SIZE;
-		int x2 = IMG_SIZE, y2 = rand() % IMG_SIZE;
-		draw_md_line(x1, y1, x2, y2, 4, 30.0f, &ctx);
-
-		int x3 = rand() % IMG_SIZE, y3 = 0;
-		int x4 = rand() % IMG_SIZE, y4 = IMG_SIZE;
-		draw_md_line(x3, y3, x4, y4, 4, 30.0f, &ctx);
-	}
-
-	/* A loop road defined by vertices (e.g. an octagon) using midpoint displacement */
-	ctx.thickness = 2;
-	int num_vertices = 8;
-	int loop_radius = IMG_SIZE / 3;
-	int loop_cx = IMG_SIZE / 2;
-	int loop_cy = IMG_SIZE / 2;
-
-	int pts_x[8], pts_y[8];
-	for (int i = 0; i < num_vertices; i++) {
-		float angle = (2.0f * 3.14159265f * i) / num_vertices;
-		/* Slightly squash and jitter the points */
-		pts_x[i] = loop_cx + (int)(loop_radius * cos(angle) * (1.0f + (rand()%20 - 10)/100.0f));
-		pts_y[i] = loop_cy + (int)(loop_radius * sin(angle) * (0.8f + (rand()%20 - 10)/100.0f));
-	}
-
-	for (int i = 0; i < num_vertices; i++) {
-		int next_i = (i + 1) % num_vertices;
-		draw_md_line(pts_x[i], pts_y[i], pts_x[next_i], pts_y[next_i], 3, 15.0f, &ctx);
-	}
+	draw_roads(&ctx, 3, 16, IMG_SIZE, IMG_SIZE);
 
 	add_bloom_effect(emittance_map, IMG_SIZE, IMG_SIZE);
 
