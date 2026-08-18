@@ -1,0 +1,59 @@
+.TH CITIES-FROM-SPACE 1 "August 2026" "User Commands"
+.SH NAME
+cities-from-space \- generate procedural city decals for planet models
+.SH SYNOPSIS
+.B cities-from-space
+[\fB\-s\fR|\fB\-\-size\fR \fIPIXELS\fR]
+[\fB\-n\fR|\fB\-\-num\fR \fICOUNT\fR]
+[\fB\-h\fR|\fB\-\-help\fR]
+.SH DESCRIPTION
+.B cities-from-space
+is a procedural texture generation program designed to create city decals for space games. These decals are intended to be pasted onto spherical planet models to represent sprawling urban areas.
+.PP
+The program outputs two PNG images: a diffuse map for the daylight side of the planet, and an emittance (emission) map featuring a bloom effect to represent glowing city lights on the night side of the planet.
+.PP
+The city structures are generated using a recursive circle algorithm to build a natural-looking metropolitan footprint. The program then overlays a network of grid roads, main arteries (using midpoint displacement), and loop roads, seamlessly blending them using an alpha-mask blur.
+.SH OPTIONS
+.TP
+\fB\-s\fR, \fB\-\-size\fR \fIPIXELS\fR
+Set the width and height of a single city image in pixels. The generated images are always square. The default size is 512.
+.TP
+\fB\-n\fR, \fB\-\-num\fR \fICOUNT\fR
+Specify the number of individual cities to generate. If greater than 1, the program will combine the resulting cities into a single texture atlas. The dimensions of the atlas are automatically calculated to be as close to a square grid as possible. The default count is 1.
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print a brief usage message and exit.
+.SH REQUIRED FILES
+The program requires the following source texture PNG files to be present in the working directory before execution:
+.TP
+.B city-texture.png
+Used as the base texture for the urban areas.
+.TP
+.B road-texture.png
+Used to color the diffuse map road networks.
+.TP
+.B lights-texture.png
+Used to map colors to the nighttime emittance map.
+.SH OUTPUT FILES
+The program writes two files to the current working directory, overwriting any existing files with the same names:
+.TP
+.B diffuse_map.png
+The final composited diffuse texture atlas (daytime).
+.TP
+.B emittance_map.png
+The final composited emittance texture atlas with bloom effects (nighttime).
+.SH EXAMPLES
+Generate a single 1024x1024 city decal:
+.PP
+.RS
+.B cities-from-space \-s 1024
+.RE
+.PP
+Generate an atlas of 16 cities, with each city being 256x256 pixels. This will result in 1024x1024 output atlas images (a 4x4 grid):
+.PP
+.RS
+.B cities-from-space \-\-size 256 \-\-num 16
+.RE
+.SH EXIT STATUS
+Returns 0 on success, and 1 if there is an error (such as missing texture files or invalid command-line arguments).
+
