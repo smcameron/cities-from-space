@@ -5,7 +5,7 @@
 #include "bline.h"
 #include "png_utils.h"
 
-#define IMG_SIZE 256
+#define IMG_SIZE 512
 
 /* Structure to hold loaded texture data */
 typedef struct {
@@ -63,18 +63,17 @@ void draw_recursive_circles(unsigned char *diffuse, int cx, int cy, float radius
 		}
 	}
 
-	/* Recurse with 4 or 5 smaller circles near the edges */
-	int num_children = 4 + (rand() % 2);
+	/* Recurse with a few smaller circles near the edges */
+	int num_children = 7 + (rand() % 4);
 	for (int i = 0; i < num_children; i++) {
-		/* Distribute evenly but add some random rotation jitter */
-		float angle = (2.0f * 3.14159265f * i) / num_children + ((rand() % 100) / 100.0f);
+		float angle = (rand() % 360) * 3.14159265f * 2.0f / 180.0f; /* Distribute randomly */
 
-		/* Each smaller circle is between 20 and 40 percent of the parent size */
-		float size_factor = 0.2f + ((rand() % 21) / 100.0f);
+		/* Each smaller circle is between 25 and 45 percent of the parent size */
+		float size_factor = 0.20f + ((rand() % 21) / 100.0f);
 		float new_r = radius * size_factor;
 
-		int new_cx = cx + (int)(radius * cos(angle));
-		int new_cy = cy + (int)(radius * sin(angle));
+		int new_cx = cx + (int)(1.2f * radius * cos(angle));
+		int new_cy = cy + (int)(1.2f * radius * sin(angle));
 
 		draw_recursive_circles(diffuse, new_cx, new_cy, new_r, tex);
 	}
@@ -194,7 +193,7 @@ int main() {
 	unsigned char *emittance_map = (unsigned char *)calloc(img_bytes, 1);
 
 	/* Draw diffuse map recursive circles */
-	float initial_radius = (IMG_SIZE / 2.0f) * 0.9f; /* A little smaller than image size */
+	float initial_radius = (0.3f * IMG_SIZE);
 	draw_recursive_circles(diffuse_map, IMG_SIZE / 2, IMG_SIZE / 2, initial_radius, &city_tex);
 
 	/* Context for road drawing operations */
