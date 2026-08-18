@@ -47,14 +47,14 @@ void draw_recursive_circles(unsigned char *diffuse, int cx, int cy, float radius
 	for (int y = cy - r; y <= cy + r; y++) {
 		for (int x = cx - r; x <= cx + r; x++) {
 			if (x < 0 || x >= IMG_SIZE || y < 0 || y >= IMG_SIZE) continue;
-			
+
 			if ((x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r) {
 				/* Sample color from the city texture mapping coordinates[cite: 3] */
 				int tx = ((x % tex->w) + tex->w) % tex->w;
 				int ty = ((y % tex->h) + tex->h) % tex->h;
 				int t_idx = (ty * tex->w + tx) * (tex->hasAlpha ? 4 : 3);
 				int d_idx = (y * IMG_SIZE + x) * 4;
-				
+
 				diffuse[d_idx]     = tex->pixels[t_idx];
 				diffuse[d_idx + 1] = tex->pixels[t_idx + 1];
 				diffuse[d_idx + 2] = tex->pixels[t_idx + 2];
@@ -64,18 +64,18 @@ void draw_recursive_circles(unsigned char *diffuse, int cx, int cy, float radius
 	}
 
 	/* Recurse with 4 or 5 smaller circles near the edges[cite: 3] */
-	int num_children = 4 + (rand() % 2); 
+	int num_children = 4 + (rand() % 2);
 	for (int i = 0; i < num_children; i++) {
 		/* Distribute evenly but add some random rotation jitter */
 		float angle = (2.0f * 3.14159265f * i) / num_children + ((rand() % 100) / 100.0f);
-		
+
 		/* Each smaller circle is between 20 and 40 percent of the parent size[cite: 3] */
 		float size_factor = 0.2f + ((rand() % 21) / 100.0f);
 		float new_r = radius * size_factor;
-		
+
 		int new_cx = cx + (int)(radius * cos(angle));
 		int new_cy = cy + (int)(radius * sin(angle));
-		
+
 		draw_recursive_circles(diffuse, new_cx, new_cy, new_r, tex);
 	}
 }
@@ -91,9 +91,9 @@ void plot_road_pixel(int x, int y, void *context) {
 		for (int dx = -half_t; dx <= half_t + (t % 2); dx++) {
 			int px = x + dx;
 			int py = y + dy;
-			
+
 			if (px < 0 || px >= IMG_SIZE || py < 0 || py >= IMG_SIZE) continue;
-			
+
 			int idx = (py * IMG_SIZE + px) * 4;
 
 			/* Both the diffuse map and the emittance map are updated[cite: 3] */
@@ -101,7 +101,7 @@ void plot_road_pixel(int x, int y, void *context) {
 				int tx = ((px % ctx->road_tex->w) + ctx->road_tex->w) % ctx->road_tex->w;
 				int ty = ((py % ctx->road_tex->h) + ctx->road_tex->h) % ctx->road_tex->h;
 				int t_idx = (ty * ctx->road_tex->w + tx) * (ctx->road_tex->hasAlpha ? 4 : 3);
-				
+
 				ctx->diffuse[idx]     = ctx->road_tex->pixels[t_idx];
 				ctx->diffuse[idx + 1] = ctx->road_tex->pixels[t_idx + 1];
 				ctx->diffuse[idx + 2] = ctx->road_tex->pixels[t_idx + 2];
@@ -113,7 +113,7 @@ void plot_road_pixel(int x, int y, void *context) {
 				int tx = ((px % ctx->light_tex->w) + ctx->light_tex->w) % ctx->light_tex->w;
 				int ty = ((py % ctx->light_tex->h) + ctx->light_tex->h) % ctx->light_tex->h;
 				int t_idx = (ty * ctx->light_tex->w + tx) * (ctx->light_tex->hasAlpha ? 4 : 3);
-				
+
 				ctx->emittance[idx]     = ctx->light_tex->pixels[t_idx];
 				ctx->emittance[idx + 1] = ctx->light_tex->pixels[t_idx + 1];
 				ctx->emittance[idx + 2] = ctx->light_tex->pixels[t_idx + 2];
@@ -129,14 +129,14 @@ void draw_md_line(int x1, int y1, int x2, int y2, int depth, float displacement,
 		bline(x1, y1, x2, y2, plot_road_pixel, ctx); /* Rely on bline implementation[cite: 1] */
 		return;
 	}
-	
+
 	int xm = (x1 + x2) / 2;
 	int ym = (y1 + y2) / 2;
-	
+
 	/* Apply random displacement */
 	xm += (rand() % (int)(displacement * 2 + 1)) - (int)displacement;
 	ym += (rand() % (int)(displacement * 2 + 1)) - (int)displacement;
-	
+
 	draw_md_line(x1, y1, xm, ym, depth - 1, displacement / 2.0f, ctx);
 	draw_md_line(xm, ym, x2, y2, depth - 1, displacement / 2.0f, ctx);
 }
@@ -146,7 +146,7 @@ int main() {
 
 	/* Initialize texture structures */
 	Texture city_tex, road_tex, light_tex;
-	
+
 	if (!load_texture("city-texture.png", &city_tex) ||
 		!load_texture("road-texture.png", &road_tex) ||
 		!load_texture("lights-texture.png", &light_tex)) {
@@ -186,7 +186,7 @@ int main() {
 		int x1 = 0, y1 = rand() % IMG_SIZE;
 		int x2 = IMG_SIZE, y2 = rand() % IMG_SIZE;
 		draw_md_line(x1, y1, x2, y2, 4, 30.0f, &ctx);
-		
+
 		int x3 = rand() % IMG_SIZE, y3 = 0;
 		int x4 = rand() % IMG_SIZE, y4 = IMG_SIZE;
 		draw_md_line(x3, y3, x4, y4, 4, 30.0f, &ctx);
@@ -198,7 +198,7 @@ int main() {
 	int loop_radius = IMG_SIZE / 3;
 	int loop_cx = IMG_SIZE / 2;
 	int loop_cy = IMG_SIZE / 2;
-	
+
 	int pts_x[8], pts_y[8];
 	for (int i = 0; i < num_vertices; i++) {
 		float angle = (2.0f * 3.14159265f * i) / num_vertices;
@@ -206,7 +206,7 @@ int main() {
 		pts_x[i] = loop_cx + (int)(loop_radius * cos(angle) * (1.0f + (rand()%20 - 10)/100.0f));
 		pts_y[i] = loop_cy + (int)(loop_radius * sin(angle) * (0.8f + (rand()%20 - 10)/100.0f));
 	}
-	
+
 	for (int i = 0; i < num_vertices; i++) {
 		int next_i = (i + 1) % num_vertices;
 		draw_md_line(pts_x[i], pts_y[i], pts_x[next_i], pts_y[next_i], 3, 15.0f, &ctx);
