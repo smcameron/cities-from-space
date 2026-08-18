@@ -245,9 +245,13 @@ int main() {
 	ctx.thickness = 1;
 	int grid_spacing = 16;
 	for (int y = grid_spacing; y < IMG_SIZE; y += grid_spacing + (rand() % 5 - 2)) {
+		if (rand() % 1000 < 300) /* skip some grid lines */
+			continue;
 		bline(0, y, IMG_SIZE, y + (rand() % 10 - 5), plot_road_pixel, &ctx);
 	}
 	for (int x = grid_spacing; x < IMG_SIZE; x += grid_spacing + (rand() % 5 - 2)) {
+		if (rand() % 1000 < 300) /* skip some grid lines */
+			continue;
 		bline(x, 0, x + (rand() % 10 - 5), IMG_SIZE, plot_road_pixel, &ctx);
 	}
 
