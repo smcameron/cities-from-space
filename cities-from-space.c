@@ -247,12 +247,28 @@ int main() {
 	for (int y = grid_spacing; y < IMG_SIZE; y += grid_spacing + (rand() % 5 - 2)) {
 		if (rand() % 1000 < 300) /* skip some grid lines */
 			continue;
-		bline(0, y, IMG_SIZE, y + (rand() % 10 - 5), plot_road_pixel, &ctx);
+		int startx, stopx;
+		if ((rand() % 1000) < 333) {
+			startx = 0;
+			stopx = IMG_SIZE;
+		} else {
+			startx = rand() % (IMG_SIZE / 3);
+			stopx = rand() % (IMG_SIZE / 3) + IMG_SIZE / 2;
+		}
+		bline(startx, y, stopx, y + (rand() % 10 - 5), plot_road_pixel, &ctx);
 	}
 	for (int x = grid_spacing; x < IMG_SIZE; x += grid_spacing + (rand() % 5 - 2)) {
 		if (rand() % 1000 < 300) /* skip some grid lines */
 			continue;
-		bline(x, 0, x + (rand() % 10 - 5), IMG_SIZE, plot_road_pixel, &ctx);
+		int starty, stopy;
+		if ((rand() % 1000) < 333) {
+			starty = 0;
+			stopy = IMG_SIZE;
+		} else {
+			starty = rand() % (IMG_SIZE / 3);
+			stopy = rand() % (IMG_SIZE / 3) + IMG_SIZE / 2;
+		}
+		bline(x, starty, x + (rand() % 10 - 5), stopy, plot_road_pixel, &ctx);
 	}
 
 	/* Thicker main artery roads traversing the image using midpoint displacement */
