@@ -1,6 +1,7 @@
 # Compiler and flags
 CC = gcc
 CFLAGS = -Wall -Wextra -O2
+# CFLAGS = -g3 -Wall -Wextra
 LDFLAGS = -lpng -lm
 
 # Target executable name

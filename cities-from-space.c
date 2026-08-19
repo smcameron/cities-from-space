@@ -163,11 +163,11 @@ void draw_one_circle(unsigned char *diffuse, int cx, int cy, float radius, Textu
 				continue;
 
 			int r12 = r * r;
-			int r22 = (int) (r * 1.10f * r * 1.10f);
+			int r22 = (int) (r * 1.15f * r * 1.15f);
 			int d2 = r22 - r12;
 			int d = (x - cx) * (x - cx) + (y - cy) * (y - cy);
 			if (d <= r22) {
-				if (d >= r12 && (rand() % d2) < (d2 / 3)) /* Make edge a bit raggedy */
+				if (d2 > 0 && d >= r12 && (rand() % d2) < (d2 / 3)) /* Make edge a bit raggedy */
 					continue;
 				/* Sample color from the city texture mapping coordinates */
 				int tx = ((x % tex->w) + tex->w) % tex->w;
@@ -189,19 +189,25 @@ void draw_recursive_circles(unsigned char *diffuse, int cx, int cy, float radius
 	/* Stop recursing when circles are a few pixels in diameter */
 	if (radius < 3.0f) return;
 
-	draw_one_circle(diffuse, cx, cy, radius, tex);
+	draw_one_circle(diffuse, cx, cy, 0.5 * radius, tex);
+	for (int i = 0; i < 5; i++) {
+		float angle = (rand() % 360) * 3.14159265 * 2.0;
+		int x = (int) (cx + radius * 0.4 * cos(angle));
+		int y = (int) (cy + radius * 0.4 * sin(angle));
+		draw_one_circle(diffuse, x, y, 0.5 * radius, tex);
+	}
 
 	/* Recurse with a few smaller circles near the edges */
 	int num_children = 7 + (rand() % 4);
 	for (int i = 0; i < num_children; i++) {
 		float angle = (rand() % 360) * 3.14159265f * 2.0f / 180.0f; /* Distribute randomly */
 
-		/* Each smaller circle is between 25 and 45 percent of the parent size */
-		float size_factor = 0.20f + ((rand() % 21) / 100.0f);
+		/* Make recursive circles a bit smaller */
+		float size_factor = 0.33f + ((rand() % 21) / 100.0f);
 		float new_r = radius * size_factor;
 
-		int new_cx = cx + (int)(1.2f * radius * cos(angle));
-		int new_cy = cy + (int)(1.2f * radius * sin(angle));
+		int new_cx = cx + (int)(1.0f * radius * cos(angle));
+		int new_cy = cy + (int)(1.0f * radius * sin(angle));
 
 		draw_recursive_circles(diffuse, new_cx, new_cy, new_r, tex);
 	}
