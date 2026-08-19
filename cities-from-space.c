@@ -154,12 +154,9 @@ int load_texture(const char *filename, Texture *tex) {
 	return 1;
 }
 
-/* Recursive function to draw city diffuse base using circles */
-void draw_recursive_circles(unsigned char *diffuse, int cx, int cy, float radius, Texture *tex) {
-	/* Stop recursing when circles are a few pixels in diameter */
-	if (radius < 3.0f) return;
-
-	int r = (int)radius;
+void draw_one_circle(unsigned char *diffuse, int cx, int cy, float radius, Texture *tex)
+{
+	int r = (int) radius;
 	for (int y = cy - r; y <= cy + r; y++) {
 		for (int x = cx - r; x <= cx + r; x++) {
 			if (x < 0 || x >= img_size || y < 0 || y >= img_size)
@@ -185,6 +182,14 @@ void draw_recursive_circles(unsigned char *diffuse, int cx, int cy, float radius
 			}
 		}
 	}
+}
+
+/* Recursive function to draw city diffuse base using circles */
+void draw_recursive_circles(unsigned char *diffuse, int cx, int cy, float radius, Texture *tex) {
+	/* Stop recursing when circles are a few pixels in diameter */
+	if (radius < 3.0f) return;
+
+	draw_one_circle(diffuse, cx, cy, radius, tex);
 
 	/* Recurse with a few smaller circles near the edges */
 	int num_children = 7 + (rand() % 4);
