@@ -162,9 +162,16 @@ void draw_recursive_circles(unsigned char *diffuse, int cx, int cy, float radius
 	int r = (int)radius;
 	for (int y = cy - r; y <= cy + r; y++) {
 		for (int x = cx - r; x <= cx + r; x++) {
-			if (x < 0 || x >= img_size || y < 0 || y >= img_size) continue;
+			if (x < 0 || x >= img_size || y < 0 || y >= img_size)
+				continue;
 
-			if ((x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r) {
+			int r12 = r * r;
+			int r22 = (int) (r * 1.10f * r * 1.10f);
+			int d2 = r22 - r12;
+			int d = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+			if (d <= r22) {
+				if (d >= r12 && (rand() % d2) < (d2 / 3)) /* Make edge a bit raggedy */
+					continue;
 				/* Sample color from the city texture mapping coordinates */
 				int tx = ((x % tex->w) + tex->w) % tex->w;
 				int ty = ((y % tex->h) + tex->h) % tex->h;
